@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Inventario | Prueba de CRUD y Eventos JS</title>
+
+</head>
+<body>
+
+    <h1>Gestión de Productos (Inventario)</h1>
+
+    <!-- Barra de acciones y filtros -->
+    <div class="toolbar">
+        <button type="button" class="btn-crear" id="btn-abrir-crear">➕ Nuevo Producto (Modal)</button>
+        
+        <label>
+            Buscar: 
+            <input type="text" id="buscador" placeholder="Buscar por nombre o código...">
+        </label>
+
+        <label>
+            Categoría:
+            <select id="select-categoria">
+                <option value="">Todas</option>
+                <option value="ALIANZAS">Alianzas</option>
+                <option value="COMPROMISO">Compromiso</option>
+                <option value="RELOJ">Reloj</option>
+                <option value="COLLAR">Collar</option>
+            </select>
+        </label>
+    </div>
+
+    <!-- Tabla Principal de Productos -->
+    <table id="tabla-productos">
+        <thead>
+            <tr>
+                <th>Img</th>
+                <th>Código</th>
+                <th>Nombre</th>
+                <th>Categoría</th>
+                <th>Material</th>
+                <th>Gama</th>
+                <th>Precio</th>
+                <th>Variantes (Tallas/Stock)</th>
+                <th>Acciones</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for producto in productos %}
+            <tr data-categoria="{{ producto.categoria }}">
+                <td>
+                    {% if producto.imagen %}
+                        <img src="{{ producto.imagen.url }}" alt="{{ producto.nombre }}" class="thumb">
+                    {% else %}
+                        -
+                    {% endif %}
+                </td>
+                <td><strong>{{ producto.codigo }}</strong></td>
+                <td>{{ producto.nombre }}</td>
+                <td>{{ producto.get_categoria_display|default:producto.categoria }}</td>
+                <td>{{ producto.get_material_display|default:producto.material }}</td>
+                <td>{{ producto.get_gama_display|default:producto.gama }}</td>
+                <td>${{ producto.precio }}</td>
+                <td>
+                    <!-- Botón para ver variantes en modal -->
+                    <button type="button" 
+                            class="btn-variantes" 
+                            data-target="variantes-{{ producto.id }}"
+                            data-nombre="{{ producto.nombre }}"
+                            data-codigo="{{ producto.codigo }}"
+                            data-total="{{ producto.variantes.count }}">
+                        📦 Ver Variantes ({{ producto.variantes.count }})
+                    </button>
+
+                    <!-- Tabla de variantes oculta en HTML para inyección en el modal -->
+                    <div id="variantes-{{ producto.id }}" style="display: none;">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Talla</th>
+                                    <th>Género</th>
+                                    <th>Stock Disponible</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for v in producto.variantes.all %}
+                                <tr>
+                                    <td><strong>{{ v.talla }}</strong></td>
+                                    <td>{{ v.get_genero_display|default:v.genero }}</td>
+                                    <td>{{ v.stock }} unid.</td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="3" style="text-align: center; color: #888;">
+                                        Este producto no tiene variantes registradas.
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </td>
+                <td class="acciones">
+                    <!-- Botón para Editar mediante Modal -->
+                    <button type="button" 
+                            class="btn-editar"
+                            data-id="{{ producto.id }}"
+                            data-codigo="{{ producto.codigo }}"
+                            data-nombre="{{ producto.nombre }}"
+                            data-categoria="{{ producto.categoria }}"
+                            data-material="{{ producto.material }}"
+                            data-gama="{{ producto.gama }}"
+                            data-precio="{{ producto.precio }}"
+                            data-descripcion="{{ producto.descripcion|default:'' }}"
+                            data-url="{% url 'producto_editar' producto.id %}">
+                        Editar
+                    </button>
+                    
+                    <!-- Botón para Eliminar mediante Modal -->
+                    <button type="button" 
+                            class="btn-eliminar"
+                            data-id="{{ producto.id }}" 
+                            data-nombre="{{ producto.nombre }}" 
+                            data-codigo="{{ producto.codigo }}"
+                            data-url="{% url 'producto_eliminar' producto.id %}">
+                        Eliminar
+                    </button>
+                </td>
+            </tr>
+            {% empty %}
+            <tr id="sin-datos">
+                <td colspan="9" style="text-align: center;">No hay productos registrados en la base de datos.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+
+    <!-- ============================================== -->
+    <!-- MODAL 1: CREAR PRODUCTO + VARIANTES            -->
+    <!-- ============================================== -->
+    <div id="modal-crear" class="modal">
+        <div class="modal-contenido">
+            <span class="cerrar" id="cerrar-modal-crear">&times;</span>
+            <h2 style="margin-top: 0;">➕ Registrar Producto y Variante</h2>
+            
+            <form method="POST" action="{% url 'producto_crear' %}" enctype="multipart/form-data" id="form-crear-producto">
+                {% csrf_token %}
+                
+                <!-- Datos del Producto -->
+                <div style="border-bottom: 1px solid #eee; padding-bottom: 10px; margin-bottom: 10px;">
+                    <h4 style="margin: 0 0 10px 0;">1. Datos del Producto</h4>
+                    {{ form.as_p }}
+                </div>
+
+                <!-- Variantes iniciales -->
+                <fieldset style="border: 1px solid #ccc; padding: 10px; border-radius: 4px;">
+                    <legend><strong>2. Variantes del Producto (Talla, Género y Stock)</strong></legend>
+                    <div id="contenedor-filas-variantes">
+                        <div class="fila-variante">
+                            <input type="text" name="talla" placeholder="Talla (ej: 7, M)" style="width: 110px;" required>
+                            <select name="genero" required>
+                                <option value="">Género...</option>
+                                {% for val, label in genero_opciones %}
+                                <option value="{{ val }}">{{ label }}</option>
+                                {% endfor %}
+                            </select>
+                            <input type="number" name="stock" placeholder="Stock" min="0" value="1" style="width: 80px;" required>
+                        </div>
+                    </div>
+
+                    <button type="button" id="btn-agregar-otra-variante" style="margin-top: 6px; font-size: 12px; cursor: pointer;">
+                        ➕ Agregar otra talla/variante
+                    </button>
+                </fieldset>
+
+                <div style="margin-top: 15px; text-align: right;">
+                    <button type="button" id="btn-cancelar-crear">Cancelar</button>
+                    <button type="submit" style="background-color: #0066cc; color: #fff; padding: 6px 14px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">
+                        Guardar Producto y Variantes
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+
+    <!-- ============================================== -->
+    <!-- MODAL 2: EDITAR PRODUCTO                       -->
+    <!-- ============================================== -->
+    <div id="modal-editar" class="modal">
+        <div class="modal-contenido">
+            <span class="cerrar" id="cerrar-modal-editar">&times;</span>
+            <h2 id="titulo-modal-editar" style="margin-top: 0;">✏️ Editar Producto</h2>
+            
+            <form method="POST" action="" enctype="multipart/form-data" id="form-editar-producto">
+                {% csrf_token %}
+                
+                <div class="form-grupo">
+                    <label for="edit-codigo">Código *</label>
+                    <input type="text" name="codigo" id="edit-codigo" required maxlength="10">
+                </div>
+
+                <div class="form-grupo">
+                    <label for="edit-nombre">Nombre *</label>
+                    <input type="text" name="nombre" id="edit-nombre" required maxlength="30">
+                </div>
+
+                <div style="display: flex; gap: 10px;">
+                    <div class="form-grupo" style="flex: 1;">
+                        <label for="edit-categoria">Categoría *</label>
+                        <select name="categoria" id="edit-categoria" required>
+                            {% for val, label in categoria_opciones %}
+                            <option value="{{ val }}">{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="form-grupo" style="flex: 1;">
+                        <label for="edit-material">Material *</label>
+                        <select name="material" id="edit-material" required>
+                            {% for val, label in material_opciones %}
+                            <option value="{{ val }}">{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="form-grupo" style="flex: 1;">
+                        <label for="edit-gama">Gama *</label>
+                        <select name="gama" id="edit-gama" required>
+                            {% for val, label in gama_opciones %}
+                            <option value="{{ val }}">{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-grupo">
+                    <label for="edit-precio">Precio ($) *</label>
+                    <input type="number" step="0.01" name="precio" id="edit-precio" required>
+                </div>
+
+                <div class="form-grupo">
+                    <label for="edit-imagen">Nueva Imagen (opcional)</label>
+                    <input type="file" name="imagen" id="edit-imagen" accept="image/*">
+                </div>
+
+                <div class="form-grupo">
+                    <label for="edit-descripcion">Descripción</label>
+                    <textarea name="descripcion" id="edit-descripcion" rows="3"></textarea>
+                </div>
+
+                <div style="margin-top: 15px; text-align: right;">
+                    <button type="button" id="btn-cancelar-editar">Cancelar</button>
+                    <button type="submit" style="background-color: #ffc107; color: #000; padding: 6px 14px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">
+                        Guardar Cambios
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+
+    <!-- ============================================== -->
+    <!-- MODAL 3: TABLA DE VARIANTES POR PRODUCTO       -->
+    <!-- ============================================== -->
+    <div id="modal-variantes" class="modal">
+        <div class="modal-contenido">
+            <span class="cerrar" id="cerrar-modal-variantes">&times;</span>
+            <h2 id="titulo-modal-variantes" style="margin-top: 0;">Variantes de Producto</h2>
+            
+            <div id="contenedor-tabla-variantes" style="margin-top: 15px;">
+                <!-- Inyección de la tabla de variantes -->
+            </div>
+
+            <div style="margin-top: 15px; text-align: right;">
+                <button type="button" id="btn-cerrar-variantes">Cerrar</button>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- ============================================== -->
+    <!-- MODAL 4: CONFIRMAR ELIMINACIÓN DE PRODUCTO    -->
+    <!-- ============================================== -->
+    <div id="modal-eliminar" class="modal">
+        <div class="modal-contenido" style="max-width: 440px; border-color: #dc3545;">
+            <span class="cerrar" id="cerrar-modal-eliminar">&times;</span>
+            <h2 style="color: #dc3545; margin-top: 0;">🗑️ ¿Eliminar Producto?</h2>
+            
+            <p>
+                ¿Estás seguro de que deseas eliminar permanentemente el producto 
+                <strong id="eliminar-nombre-producto">--</strong> (<span id="eliminar-codigo-producto">--</span>)?
+            </p>
+            <p style="color: #666; font-size: 12px;">
+                ⚠️ Esta acción también eliminará todas las tallas y variantes asociadas.
+            </p>
+            
+            <form method="POST" id="form-eliminar-producto" action="">
+                {% csrf_token %}
+                <div style="margin-top: 20px; text-align: right;">
+                    <button type="button" id="btn-cancelar-eliminar">Cancelar</button>
+                    <button type="submit" style="background-color: #dc3545; color: white; padding: 6px 14px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">
+                        Sí, Eliminar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+
+    <!-- ============================================== -->
+    <!-- MONITOR DE EVENTOS JAVASCRIPT                  -->
+    <!-- ============================================== -->
+    <div style="margin-top: 30px;">
+        <h3>Monitor de Eventos JS en Tiempo Real</h3>
+        <button type="button" id="btn-limpiar-eventos">Limpiar Registro</button>
+        <div id="consola-eventos"></div>
+    </div>
+
+
+    <!-- ============================================== -->
+    <!-- JAVASCRIPT: EVENTOS Y CONTROL DE MODALES       -->
+    <!-- ============================================== -->
+    <script>
+        const consola = document.getElementById('consola-eventos');
+        const btnLimpiar = document.getElementById('btn-limpiar-eventos');
+
+        // Función para registrar y visualizar eventos en consola y pantalla
+        function registrarEvento(tipo, elemento, detalle = '') {
+            const hora = new Date().toLocaleTimeString();
+            const mensaje = `[${hora}] [EVENTO: ${tipo.toUpperCase()}] en <${elemento}> -> ${detalle}`;
+            console.log(mensaje);
+
+            const fila = document.createElement('div');
+            fila.textContent = mensaje;
+            consola.appendChild(fila);
+            consola.scrollTop = consola.scrollHeight;
+        }
+
+
+        // ==========================================
+        // 1. MODAL CREAR PRODUCTO + VARIANTES DINÁMICAS
+        // ==========================================
+        const modalCrear = document.getElementById('modal-crear');
+        const btnAbrirCrear = document.getElementById('btn-abrir-crear');
+        const cerrarModalCrear = document.getElementById('cerrar-modal-crear');
+        const btnCancelarCrear = document.getElementById('btn-cancelar-crear');
+        const formCrear = document.getElementById('form-crear-producto');
+        const contenedorVariantes = document.getElementById('contenedor-filas-variantes');
+        const btnAgregarVariante = document.getElementById('btn-agregar-otra-variante');
+
+        btnAbrirCrear.addEventListener('click', function() {
+            modalCrear.style.display = 'block';
+            registrarEvento('click', 'button#btn-abrir-crear', 'Abriendo modal de creación');
+        });
+
+        function cerrarCrear() {
+            modalCrear.style.display = 'none';
+            registrarEvento('click', 'modal-crear', 'Cerrando modal de creación');
+        }
+
+        cerrarModalCrear.addEventListener('click', cerrarCrear);
+        btnCancelarCrear.addEventListener('click', cerrarCrear);
+
+        // Agregar fila de variante dinámicamente
+        btnAgregarVariante.addEventListener('click', function() {
+            const nuevaFila = document.createElement('div');
+            nuevaFila.className = 'fila-variante';
+            nuevaFila.innerHTML = `
+                <input type="text" name="talla" placeholder="Talla (ej: 8, L)" style="width: 110px;" required>
+                <select name="genero" required>
+                    <option value="">Género...</option>
+                    {% for val, label in genero_opciones %}
+                    <option value="{{ val }}">{{ label }}</option>
+                    {% endfor %}
+                </select>
+                <input type="number" name="stock" placeholder="Stock" min="0" value="1" style="width: 80px;" required>
+                <button type="button" class="btn-quitar-fila" title="Quitar fila">&times;</button>
+            `;
+
+            nuevaFila.querySelector('.btn-quitar-fila').addEventListener('click', function() {
+                nuevaFila.remove();
+                registrarEvento('click', 'button.btn-quitar-fila', 'Fila de variante eliminada');
+            });
+
+            contenedorVariantes.appendChild(nuevaFila);
+            registrarEvento('click', 'button#btn-agregar-otra-variante', 'Nueva fila de variante agregada');
+        });
+
+        formCrear.addEventListener('submit', function() {
+            const total = contenedorVariantes.querySelectorAll('.fila-variante').length;
+            registrarEvento('submit', 'form#form-crear-producto', `Enviando POST: Creando producto con ${total} variante(s)`);
+        });
+
+
+        // ==========================================
+        // 2. MODAL EDITAR PRODUCTO
+        // ==========================================
+        const modalEditar = document.getElementById('modal-editar');
+        const cerrarModalEditar = document.getElementById('cerrar-modal-editar');
+        const btnCancelarEditar = document.getElementById('btn-cancelar-editar');
+        const formEditar = document.getElementById('form-editar-producto');
+        const tituloModalEditar = document.getElementById('titulo-modal-editar');
+
+        const editCodigo = document.getElementById('edit-codigo');
+        const editNombre = document.getElementById('edit-nombre');
+        const editCategoria = document.getElementById('edit-categoria');
+        const editMaterial = document.getElementById('edit-material');
+        const editGama = document.getElementById('edit-gama');
+        const editPrecio = document.getElementById('edit-precio');
+        const editDescripcion = document.getElementById('edit-descripcion');
+
+        document.querySelectorAll('.btn-editar').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const id = this.getAttribute('data-id');
+                const codigo = this.getAttribute('data-codigo');
+                const nombre = this.getAttribute('data-nombre');
+                const categoria = this.getAttribute('data-categoria');
+                const material = this.getAttribute('data-material');
+                const gama = this.getAttribute('data-gama');
+                const precio = this.getAttribute('data-precio');
+                const descripcion = this.getAttribute('data-descripcion');
+                const url = this.getAttribute('data-url');
+
+                // Rellenar campos del formulario de edición
+                formEditar.action = url;
+                tituloModalEditar.textContent = `✏️ Editar Producto: ${nombre} (${codigo})`;
+                editCodigo.value = codigo;
+                editNombre.value = nombre;
+                editCategoria.value = categoria;
+                editMaterial.value = material;
+                editGama.value = gama;
+                editPrecio.value = precio;
+                editDescripcion.value = descripcion;
+
+                modalEditar.style.display = 'block';
+                registrarEvento('click', 'button.btn-editar', `Abriendo modal de edición para producto #${id} (${nombre})`);
+            });
+        });
+
+        function cerrarEditar() {
+            modalEditar.style.display = 'none';
+            registrarEvento('click', 'modal-editar', 'Cancelada edición de producto');
+        }
+
+        cerrarModalEditar.addEventListener('click', cerrarEditar);
+        btnCancelarEditar.addEventListener('click', cerrarEditar);
+
+        formEditar.addEventListener('submit', function() {
+            registrarEvento('submit', 'form#form-editar-producto', `Enviando POST de edición a ${formEditar.action}`);
+        });
+
+
+        // ==========================================
+        // 3. MODAL VARIANTES POR PRODUCTO
+        // ==========================================
+        const modalVariantes = document.getElementById('modal-variantes');
+        const tituloModalVariantes = document.getElementById('titulo-modal-variantes');
+        const contenedorTablaVariantes = document.getElementById('contenedor-tabla-variantes');
+        const cerrarModalVariantes = document.getElementById('cerrar-modal-variantes');
+        const btnCerrarVariantes = document.getElementById('btn-cerrar-variantes');
+
+        document.querySelectorAll('.btn-variantes').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const targetId = this.getAttribute('data-target');
+                const nombre = this.getAttribute('data-nombre');
+                const codigo = this.getAttribute('data-codigo');
+                const total = this.getAttribute('data-total');
+
+                const tablaOculta = document.getElementById(targetId);
+                tituloModalVariantes.textContent = `Variantes de: ${nombre} (${codigo})`;
+                
+                if (tablaOculta) {
+                    contenedorTablaVariantes.innerHTML = tablaOculta.innerHTML;
+                }
+
+                modalVariantes.style.display = 'block';
+                registrarEvento('click', 'button.btn-variantes', `Abriendo modal con variantes de ${nombre} (${total} registradas)`);
+            });
+        });
+
+        function cerrarVariantes() {
+            modalVariantes.style.display = 'none';
+            registrarEvento('click', 'modal-variantes', 'Cerrando modal de variantes');
+        }
+
+        cerrarModalVariantes.addEventListener('click', cerrarVariantes);
+        btnCerrarVariantes.addEventListener('click', cerrarVariantes);
+
+
+        // ==========================================
+        // 4. MODAL ELIMINAR PRODUCTO
+        // ==========================================
+        const modalEliminar = document.getElementById('modal-eliminar');
+        const cerrarModalEliminar = document.getElementById('cerrar-modal-eliminar');
+        const btnCancelarEliminar = document.getElementById('btn-cancelar-eliminar');
+        const formEliminar = document.getElementById('form-eliminar-producto');
+        const eliminarNombre = document.getElementById('eliminar-nombre-producto');
+        const eliminarCodigo = document.getElementById('eliminar-codigo-producto');
+
+        document.querySelectorAll('.btn-eliminar').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const id = this.getAttribute('data-id');
+                const nombre = this.getAttribute('data-nombre');
+                const codigo = this.getAttribute('data-codigo');
+                const url = this.getAttribute('data-url');
+
+                eliminarNombre.textContent = nombre;
+                eliminarCodigo.textContent = codigo;
+                formEliminar.action = url;
+
+                modalEliminar.style.display = 'block';
+                registrarEvento('click', 'button.btn-eliminar', `Abriendo modal de confirmación para eliminar #${id} (${nombre})`);
+            });
+        });
+
+        function cerrarEliminar() {
+            modalEliminar.style.display = 'none';
+            registrarEvento('click', 'modal-eliminar', 'Cancelada eliminación de producto');
+        }
+
+        cerrarModalEliminar.addEventListener('click', cerrarEliminar);
+        btnCancelarEliminar.addEventListener('click', cerrarEliminar);
+
+        formEliminar.addEventListener('submit', function() {
+            registrarEvento('submit', 'form#form-eliminar-producto', `Enviando POST de eliminación para producto ${eliminarCodigo.textContent}`);
+        });
+
+
+        // ==========================================
+        // 5. CERRAR MODALES CON CLIC AFUERA (BACKDROP)
+        // ==========================================
+        window.addEventListener('click', function(e) {
+            if (e.target === modalCrear) {
+                modalCrear.style.display = 'none';
+                registrarEvento('click:backdrop', 'window', 'Cerrado modal crear');
+            }
+            if (e.target === modalEditar) {
+                modalEditar.style.display = 'none';
+                registrarEvento('click:backdrop', 'window', 'Cerrado modal editar');
+            }
+            if (e.target === modalVariantes) {
+                modalVariantes.style.display = 'none';
+                registrarEvento('click:backdrop', 'window', 'Cerrado modal variantes');
+            }
+            if (e.target === modalEliminar) {
+                modalEliminar.style.display = 'none';
+                registrarEvento('click:backdrop', 'window', 'Cerrado modal eliminar');
+            }
+        });
+
+
+        // ==========================================
+        // 6. EVENTOS DE BÚSQUEDA Y FILTRADO
+        // ==========================================
+        const buscador = document.getElementById('buscador');
+        const selectCat = document.getElementById('select-categoria');
+        const tablaProductos = document.getElementById('tabla-productos');
+
+        buscador.addEventListener('input', function(e) {
+            const valor = e.target.value.toLowerCase();
+            registrarEvento('input', 'input#buscador', `Filtrando por texto: "${valor}"`);
+
+            const filas = tablaProductos.querySelectorAll('tbody tr');
+            filas.forEach(fila => {
+                if (fila.id === 'sin-datos') return;
+                const texto = fila.innerText.toLowerCase();
+                fila.style.display = texto.includes(valor) ? '' : 'none';
+            });
+        });
+
+        selectCat.addEventListener('change', function(e) {
+            const cat = e.target.value;
+            registrarEvento('change', 'select#select-categoria', `Filtrando por categoría: "${cat}"`);
+
+            const filas = tablaProductos.querySelectorAll('tbody tr');
+            filas.forEach(fila => {
+                if (fila.id === 'sin-datos') return;
+                const catFila = fila.getAttribute('data-categoria');
+                fila.style.display = (!cat || catFila === cat) ? '' : 'none';
+            });
+        });
+
+
+        // ==========================================
+        // 7. LIMPIAR EVENTOS Y DOMContentLoaded
+        // ==========================================
+        btnLimpiar.addEventListener('click', function() {
+            consola.innerHTML = '';
+        });
+
+        window.addEventListener('DOMContentLoaded', function() {
+            registrarEvento('DOMContentLoaded', 'window', 'Página lista. Sistema CRUD 100% en modales (Crear, Editar, Variantes y Eliminar).');
+        });
+    </script>
+
+</body>
+</html>

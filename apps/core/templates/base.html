@@ -1,0 +1,190 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Monael ERP - Dashboard{% endblock %}</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Boxicons -->
+    <link href='https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css' rel='stylesheet'>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <!-- Montserrat para general, Poppins para futuras tablas -->
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/htmx.org@2.0.1"></script>
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="{% static 'styles.css' %}">
+    {% block extra_css %}{% endblock %}
+</head>
+<body hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+    <div class="wrapper">
+        <!-- Sidebar (Aside) -->
+        <aside id="sidebar" class="sidebar">
+            <div class="sidebar-header">
+                <img src="{% static 'images/logo_monael.svg' %}" alt="Logo" class="logo-img">
+                <span class="logo-text">Monael ERP</span>
+            </div>
+            
+            <div class="menu-toggle-wrapper">
+                <span class="menu-label">Menú</span>
+                <i class='bx bx-menu' id="toggle-btn"></i>
+            </div>
+
+            <ul class="sidebar-nav">
+                <li class="sidebar-item {% if request.path == '/' or 'dashboard' in request.path %}active{% endif %}">
+                    <a href="#" class="sidebar-link">
+                        <i class='bx bxs-dashboard'></i>
+                        <span class="link-text">Dashboard</span>
+                    </a>
+                </li>
+                <li class="sidebar-item {% if '/inventario/' in request.path %}active{% endif %}">
+                    <a href="{% url 'inventario:lista_productos' %}" class="sidebar-link">
+                        <i class='bx bxs-archive'></i>
+                        <span class="link-text">Inventario</span>
+                    </a>
+                </li>
+                <li class="sidebar-item {% if '/ventas/' in request.path %}active{% endif %}">
+                    <a href="#" class="sidebar-link">
+                        <i class='bx bxs-store'></i>
+                        <span class="link-text">Ventas</span>
+                    </a>
+                </li>
+                <li class="sidebar-item {% if '/envios/' in request.path %}active{% endif %}">
+                    <a href="#" class="sidebar-link">
+                        <i class='bx bxs-box'></i>
+                        <span class="link-text">Envíos</span>
+                    </a>
+                </li>
+                <li class="sidebar-item {% if '/empleados/' in request.path %}active{% endif %}">
+                    <a href="#" class="sidebar-link">
+                        <i class='bx bxs-group'></i>
+                        <span class="link-text">Empleados</span>
+                    </a>
+                </li>
+            </ul>
+
+            <div class="sidebar-footer">
+                {% if user.is_authenticated %}
+                <form id="logout-form" action="{% url 'usuarios:logout' %}" method="POST" style="display: none;">
+                    {% csrf_token %}
+                </form>
+                <a href="#" class="logout-btn" onclick="event.preventDefault(); document.getElementById('logout-form').submit();">
+                    <div class="door-wrapper">
+                        <!-- Icono puerta abierta (oculto por defecto) -->
+                        <svg class="open-door" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M19 19V4h-4V3H5v16H3v2h18v-2h-2zm-12 0V5h10v14H7z"/>
+                            <path d="M14 10h-2v4h2v-4z"/>
+                        </svg>
+                        <!-- Icono puerta cerrada (visible por defecto) -->
+                        <svg class="closed-door" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M19 19V4h-4V3H5v16H3v2h18v-2h-2zm-12 0V5h10v14H7z"/>
+                            <path d="M13 11h2v2h-2z"/>
+                        </svg>
+                    </div>
+                    <span class="link-text logout-text">Cerrar<br>Sesión</span>
+                </a>
+                {% else %}
+                <a href="{% url 'usuarios:login' %}" class="logout-btn">
+                    <div class="door-wrapper">
+                        <i class='bx bx-log-in' style="font-size: 1.4rem;"></i>
+                    </div>
+                    <span class="link-text logout-text">Iniciar<br>Sesión</span>
+                </a>
+                {% endif %}
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Navbar -->
+            <nav class="navbar navbar-expand px-4 py-3">
+                <h3 class="navbar-brand fw-bold mb-0">{% block page_title %}Dashboard{% endblock %}</h3>
+                
+                {% block navbar_search %}
+                <form class="d-flex mx-auto search-form">
+                    <div class="input-group">
+                        <span class="input-group-text">
+                            <i class='bx bx-search'></i>
+                        </span>
+                        <input type="text" id="search-input" name="q" class="form-control" placeholder="Buscar ...">
+                    </div>
+                </form>
+                {% endblock %}
+
+                <div class="navbar-nav ms-auto align-items-center flex-row gap-4">
+                    <!-- Campana de Notificaciones animada -->
+                    <div class="nav-item">
+                        <a href="#" class="nav-link notification-icon">
+                            <i class='bx bxs-bell bell-icon'></i>
+                        </a>
+                    </div>
+
+                    <!-- Perfil de usuario (Dropdown interactivo) -->
+                    {% if user.is_authenticated %}
+                    <div class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle d-flex align-items-center user-info" href="#" id="userDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false" style="text-decoration: none; border: none; outline: none; background: none;">
+                            <i class='bx bxs-user-circle user-avatar'></i>
+                            <div class="ms-2 d-none d-md-block text-start">
+                                <div class="fw-bold user-name">{{ user.username }}</div>
+                                <div class="user-role">
+                                    {% if user.is_superuser %}
+                                        Super Administrador
+                                    {% elif user.is_staff %}
+                                        Administrador
+                                    {% else %}
+                                        Usuario ERP
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end border-0 shadow-sm mt-2" aria-labelledby="userDropdown" style="background-color: #ffffff; border-radius: 12px; min-width: 180px;">
+                            <li class="px-3 py-2" style="border-bottom: 1px solid rgba(0,0,0,0.05);">
+                                <div class="fw-bold text-dark" style="font-size: 0.85rem;">¡Hola, {{ user.username }}!</div>
+                                <div class="text-muted" style="font-size: 0.7rem;">Sesión activa</div>
+                            </li>
+                            {% if user.is_staff %}
+                            <li>
+                                <a class="dropdown-item d-flex align-items-center gap-2 py-2 text-dark" href="{% url 'admin:index' %}" style="font-size: 0.85rem;">
+                                    <i class='bx bx-cog' style="font-size: 1.1rem; color: var(--primary-green);"></i> Panel Django
+                                </a>
+                            </li>
+                            {% endif %}
+                            <li>
+                                <hr class="dropdown-divider m-0" style="border-color: rgba(0,0,0,0.05);">
+                            </li>
+                            <li>
+                                <a class="dropdown-item d-flex align-items-center gap-2 py-2 text-danger" href="#" onclick="event.preventDefault(); document.getElementById('logout-form').submit();" style="font-size: 0.85rem; font-weight: 600;">
+                                    <i class='bx bx-log-out' style="font-size: 1.1rem;"></i> Cerrar Sesión
+                                </a>
+                            </li>
+                        </ul>
+                    </div>
+                    {% else %}
+                    <div class="nav-item">
+                        <a href="{% url 'usuarios:login' %}" class="btn btn-outline-success btn-sm d-flex align-items-center gap-2 px-3" style="border-radius: 20px; font-weight: 600; border-color: var(--primary-green); color: var(--primary-green);">
+                            <i class='bx bx-log-in' style="font-size: 1.1rem;"></i> Iniciar Sesión
+                        </a>
+                    </div>
+                    {% endif %}
+                </div>
+            </nav>
+
+            <!-- Page Content -->
+            <main class="content px-4 py-4">
+                {% block content %}
+                <!-- Aquí se inyectará el contenido de las plantillas hijas -->
+                {% endblock %}
+            </main>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Custom JS -->
+    <script src="{% static 'script.js' %}"></script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

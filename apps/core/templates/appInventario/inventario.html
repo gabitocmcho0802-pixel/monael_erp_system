@@ -1,0 +1,565 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Monael ERP - Inventario{% endblock %}
+{% block page_title %}Inventario{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'inventario.css' %}">
+{% endblock %}
+
+{% block content %}
+<!-- ========================================================
+     TOOLBAR: ORDEN, FILTROS Y BOTÓN AGREGAR
+     ======================================================== -->
+<div class="inv-toolbar d-flex align-items-center justify-content-between mb-3">
+    <div class="d-flex align-items-center gap-2">
+        <!-- Botón de Orden A-Z / Z-A -->
+        <button id="btn-orden" class="inv-filter-btn" aria-label="Orden A-Z">
+            <i class='bx bx-sort-alt-2'></i>
+            <span>Orden: A-Z</span>
+        </button>
+
+        <!-- Dropdown de Filtro por Material -->
+        <div class="inv-dropdown-wrapper" id="filter-wrapper">
+            <button class="inv-filter-btn" id="filter-btn" type="button" aria-expanded="false" aria-haspopup="true">
+                <span>Todos</span>
+                <i class='bx bx-chevron-down'></i>
+            </button>
+            <div class="inv-dropdown-menu" id="filter-menu" role="menu">
+                <button type="button" class="inv-dropdown-item active" data-filter="todos">Todos</button>
+                {% for val, label in material_opciones %}
+                <button type="button" class="inv-dropdown-item" data-filter="{{ val }}">{{ label }}</button>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Botón Agregar Producto -->
+    <button id="btn-agregar" class="inv-add-btn" type="button" data-bs-toggle="modal" data-bs-target="#modalProducto" aria-label="Agregar nuevo producto">
+        <i class='bx bx-plus-circle'></i>
+        <span>Agregar Producto</span>
+    </button>
+</div>
+
+<!-- ========================================================
+     TABLA DE PRODUCTOS
+     ======================================================== -->
+<div class="inv-table-card">
+    <div class="inv-table-wrapper">
+        <table class="inv-table" id="inventory-table" aria-label="Tabla de inventario de productos">
+            <thead>
+                <tr>
+                    <th>Código</th>
+                    <th>Nombre</th>
+                    <th>Material</th>
+                    <th>Precio</th>
+                    <th>Imagen</th>
+                    <th>Descripción</th>
+                    <th>Tallas</th>
+                    <th>Acciones</th>
+                </tr>
+            </thead>
+            <tbody id="table-body">
+                {% for producto in productos %}
+                <tr class="inv-product-row"
+                    data-id="{{ producto.id }}" 
+                    data-codigo="{{ producto.codigo }}" 
+                    data-nombre="{{ producto.nombre }}" 
+                    data-material="{{ producto.material }}" 
+                    data-categoria="{{ producto.categoria }}" 
+                    data-gama="{{ producto.gama }}" 
+                    data-precio="{{ producto.precio }}" 
+                    data-descripcion="{{ producto.descripcion|default:'' }}"
+                    data-imagen-url="{% if producto.imagen %}{{ producto.imagen.url }}{% endif %}">
+                    
+                    <td><strong>{{ producto.codigo }}</strong></td>
+                    <td>{{ producto.nombre }}</td>
+                    <td>{{ producto.get_material_display|default:producto.material }}</td>
+                    <td>S/{{ producto.precio }}</td>
+                    <td>
+                        {% if producto.imagen %}
+                            <img src="{{ producto.imagen.url }}" alt="{{ producto.nombre }}" class="prod-img">
+                        {% else %}
+                            <div class="prod-img d-inline-flex align-items-center justify-content-center text-muted" style="font-size: 1.15rem; background:#f4f6f5;">💎</div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="prod-desc" title="{{ producto.descripcion|default:'' }}">
+                            {{ producto.descripcion|default:"-" }}
+                        </span>
+                    </td>
+                    <td>
+                        <!-- Botón para ver tallas en modal -->
+                        <button type="button" 
+                                class="inv-btn-tallas" 
+                                data-id="{{ producto.id }}" 
+                                data-nombre="{{ producto.nombre }}" 
+                                data-codigo="{{ producto.codigo }}">
+                            Ver Tallas ({{ producto.variantes.count }})
+                        </button>
+                    </td>
+                    <td>
+                        <div class="inv-action-btns">
+                            <!-- Botón Editar -->
+                            <button type="button" 
+                                     class="inv-icon-btn edit btn-abrir-editar" 
+                                    data-id="{{ producto.id }}" 
+                                    data-codigo="{{ producto.codigo }}" 
+                                    data-nombre="{{ producto.nombre }}" 
+                                    data-categoria="{{ producto.categoria }}" 
+                                    data-material="{{ producto.material }}" 
+                                    data-gama="{{ producto.gama }}" 
+                                    data-precio="{{ producto.precio }}" 
+                                    data-descripcion="{{ producto.descripcion|default:'' }}" 
+                                    data-imagen-url="{% if producto.imagen %}{{ producto.imagen.url }}{% endif %}"
+                                    data-url="{% url 'inventario:producto_editar' producto.id %}" 
+                                    title="Editar">
+                                <i class='bx bx-edit'></i>
+                            </button>
+
+                            <!-- Botón Eliminar -->
+                            <button type="button" 
+                                    class="inv-icon-btn delete btn-abrir-eliminar" 
+                                    data-id="{{ producto.id }}" 
+                                    data-nombre="{{ producto.nombre }}" 
+                                    data-codigo="{{ producto.codigo }}" 
+                                    data-url="{% url 'inventario:producto_eliminar' producto.id %}" 
+                                    title="Eliminar">
+                                <i class='bx bx-trash'></i>
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr id="empty-row">
+                    <td colspan="8" class="text-center py-5 text-muted">
+                        <i class='bx bx-box' style="font-size: 2.2rem; display:block; margin-bottom:0.5rem; color:var(--inv-green-soft);"></i>
+                        No hay productos registrados en el inventario.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Paginación Footer -->
+    <div class="inv-table-footer d-flex align-items-center justify-content-between">
+        <!-- Botones de página -->
+        <div class="inv-pagination d-flex align-items-center gap-2" id="pagination" aria-label="Paginación">
+            <!-- Generado dinámicamente por JS -->
+        </div>
+
+        <!-- Selector Mostrar Filas -->
+        <div class="d-flex align-items-center gap-2">
+            <span class="inv-footer-label">Mostrar:</span>
+            <div class="inv-dropdown-wrapper" id="rows-wrapper">
+                <button class="inv-rows-btn" id="rows-btn" type="button" aria-expanded="false" aria-haspopup="true">
+                    <span id="rows-label">10</span>
+                    <i class='bx bx-chevron-down'></i>
+                </button>
+                <div class="inv-dropdown-menu inv-dropdown-right inv-dropdown-up" id="rows-menu" role="menu">
+                    <button type="button" class="inv-dropdown-item" data-rows="5">5</button>
+                    <button type="button" class="inv-dropdown-item active" data-rows="10">10</button>
+                    <button type="button" class="inv-dropdown-item" data-rows="20">20</button>
+                    <button type="button" class="inv-dropdown-item" data-rows="50">50</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ========================================================
+     ALMACÉN OCULTO DE VARIANTES (DATOS AISLADOS DE LA TABLA)
+     ======================================================== -->
+<div id="variantes-storage" style="display: none;" aria-hidden="true">
+    {% for producto in productos %}
+    <div id="variantes-data-{{ producto.id }}" 
+         data-json='[{% for v in producto.variantes.all %}{"id": {{ v.id }}, "talla": "{{ v.talla|escapejs }}", "genero": "{{ v.genero|escapejs }}", "stock": {{ v.stock }}}{% if not forloop.last %},{% endif %}{% endfor %}]'>
+        <table>
+            <tbody>
+                {% for v in producto.variantes.all %}
+                <tr>
+                    <td><strong>{{ v.talla }}</strong></td>
+                    <td>{{ v.get_genero_display|default:v.genero }}</td>
+                    <td>{{ v.stock }} unid.</td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="3" class="text-center text-muted py-3">
+                        No hay tallas registradas para este producto.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endfor %}
+</div>
+
+
+<!-- ========================================================
+     MODAL 1: CREAR NUEVO PRODUCTO + VARIANTES
+     ======================================================== -->
+<div class="modal fade" id="modalProducto" tabindex="-1" aria-labelledby="modalProductoLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered inv-modal-dialog">
+        <div class="modal-content inv-modal-content">
+
+            <!-- Header -->
+            <div class="inv-modal-header">
+                <h2 class="inv-modal-title" id="modalProductoLabel">Crear Nuevo Producto</h2>
+                <button type="button" class="inv-modal-close" data-bs-dismiss="modal" aria-label="Cerrar">
+                    <i class='bx bx-x-circle'></i>
+                </button>
+            </div>
+
+            <form id="form-producto" method="POST" action="{% url 'inventario:producto_crear' %}" enctype="multipart/form-data">
+                {% csrf_token %}
+
+                <!-- Body -->
+                <div class="inv-modal-body">
+                    
+                    <!-- Fila 1: Código + Nombre -->
+                    <div class="inv-form-row">
+                        <div class="inv-form-group">
+                            <label class="inv-label" for="prod-codigo">Código *</label>
+                            <input id="prod-codigo" name="codigo" type="text" class="inv-input" placeholder="Ej: AL-001" required maxlength="10">
+                        </div>
+                        <div class="inv-form-group">
+                            <label class="inv-label" for="prod-nombre">Nombre *</label>
+                            <input id="prod-nombre" name="nombre" type="text" class="inv-input" placeholder="Ej: Alianza Amor Eterno" required maxlength="30">
+                        </div>
+                    </div>
+
+                    <!-- Fila 2: Categoría + Gama -->
+                    <div class="inv-form-row">
+                        <div class="inv-form-group">
+                            <label class="inv-label" for="prod-categoria">Categoría *</label>
+                            <div class="inv-select-wrapper">
+                                <select id="prod-categoria" name="categoria" class="inv-select" required>
+                                    {% for val, label in categoria_opciones %}
+                                    <option value="{{ val }}">{{ label }}</option>
+                                    {% endfor %}
+                                </select>
+                                <i class='bx bx-chevron-down inv-select-icon'></i>
+                            </div>
+                        </div>
+                        <div class="inv-form-group">
+                            <label class="inv-label" for="prod-gama">Gama *</label>
+                            <div class="inv-select-wrapper">
+                                <select id="prod-gama" name="gama" class="inv-select" required>
+                                    {% for val, label in gama_opciones %}
+                                    <option value="{{ val }}">{{ label }}</option>
+                                    {% endfor %}
+                                </select>
+                                <i class='bx bx-chevron-down inv-select-icon'></i>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Fila 3: Material + Precio -->
+                    <div class="inv-form-row">
+                        <div class="inv-form-group">
+                            <label class="inv-label" for="prod-material">Material *</label>
+                            <div class="inv-select-wrapper">
+                                <select id="prod-material" name="material" class="inv-select" required>
+                                    {% for val, label in material_opciones %}
+                                    <option value="{{ val }}">{{ label }}</option>
+                                    {% endfor %}
+                                </select>
+                                <i class='bx bx-chevron-down inv-select-icon'></i>
+                            </div>
+                        </div>
+                        <div class="inv-form-group">
+                            <label class="inv-label" for="prod-precio">Precio (S/) *</label>
+                            <input id="prod-precio" name="precio" type="number" step="0.01" class="inv-input" placeholder="169.90" required>
+                        </div>
+                    </div>
+
+                    <!-- Subida de Imagen (Opcional) -->
+                    <div class="inv-form-group-full">
+                        <label class="inv-label">Subir Imagen (Opcional)</label>
+                        <div class="inv-upload-area" id="upload-area">
+                            <button type="button" class="inv-upload-btn" id="upload-btn">
+                                <i class='bx bx-upload'></i>
+                                Subir Imagen
+                            </button>
+                            <span class="inv-upload-hint" id="upload-hint">Seleccione o arrastre una imagen</span>
+                            <input type="file" id="file-input" name="imagen" accept="image/*" class="d-none">
+                        </div>
+                        <!-- Previsualización si seleccionó imagen -->
+                        <div id="create-img-preview-box" class="mt-2 align-items-center gap-2" style="display: none;">
+                            <img id="create-img-preview" src="" alt="Vista previa" class="prod-img" style="width: 48px; height: 48px; object-fit: contain;">
+                            <button type="button" id="btn-cancel-create-img" class="btn btn-sm btn-outline-danger" style="font-size: 0.72rem; padding: 2px 8px;">
+                                <i class='bx bx-trash'></i> Quitar selección
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Descripción -->
+                    <div class="inv-form-group-full">
+                        <label class="inv-label" for="prod-descripcion">Descripción</label>
+                        <textarea id="prod-descripcion" name="descripcion" class="inv-textarea" rows="2" placeholder="Escribe detalles del producto..."></textarea>
+                    </div>
+
+                    <!-- Sección: Agregar Tallas -->
+                    <div class="inv-form-group-full">
+                        <div class="d-flex align-items-center justify-content-between mb-2">
+                            <label class="inv-label mb-0">Tallas del Producto</label>
+                            <button type="button" class="inv-filter-btn" id="btn-add-talla-row" style="padding: 3px 10px; font-size: 0.74rem;">
+                                <i class='bx bx-plus'></i>
+                                <span>Otra Talla</span>
+                            </button>
+                        </div>
+                        <div class="inv-tallas-container" id="tallas-container">
+                            <!-- Fila inicial por defecto -->
+                            <div class="inv-talla-row">
+                                <div class="inv-talla-field" style="flex: 0 0 80px;">
+                                    <label class="inv-talla-label">Número</label>
+                                    <input type="text" name="talla" class="inv-input inv-talla-input" placeholder="Ej: 7" required>
+                                </div>
+                                <div class="inv-talla-field" style="flex: 1;">
+                                    <label class="inv-talla-label">Género</label>
+                                    <div class="inv-select-wrapper">
+                                        <select name="genero" class="inv-select inv-talla-select" required>
+                                            <option value="MUJER">Mujer</option>
+                                            <option value="HOMBRE">Hombre</option>
+                                            <option value="UNISEX" selected>Unisex</option>
+                                        </select>
+                                        <i class='bx bx-chevron-down inv-select-icon'></i>
+                                    </div>
+                                </div>
+                                <div class="inv-talla-field" style="flex: 0 0 80px;">
+                                    <label class="inv-talla-label">Stock</label>
+                                    <input type="number" name="stock" class="inv-input inv-talla-input" min="0" value="1" required>
+                                </div>
+                                <div class="inv-talla-actions">
+                                    <button type="button" class="inv-talla-remove btn-eliminar-fila-talla" title="Quitar talla">
+                                        <i class='bx bx-x-circle'></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- Footer -->
+                <div class="inv-modal-footer">
+                    <button type="submit" class="inv-btn-guardar" id="btn-guardar">Guardar</button>
+                    <button type="button" class="inv-btn-cancelar" data-bs-dismiss="modal">Cancelar</button>
+                </div>
+            </form>
+
+        </div>
+    </div>
+</div>
+
+
+<!-- ========================================================
+     MODAL 2: EDITAR PRODUCTO + GESTIÓN COMPLETA DE TALLAS E IMAGEN
+     ======================================================== -->
+<div class="modal fade" id="modalEditarProducto" tabindex="-1" aria-labelledby="modalEditarLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered inv-modal-dialog">
+        <div class="modal-content inv-modal-content">
+
+            <!-- Header -->
+            <div class="inv-modal-header">
+                <h2 class="inv-modal-title" id="modalEditarLabel">Editar Producto</h2>
+                <button type="button" class="inv-modal-close" data-bs-dismiss="modal" aria-label="Cerrar">
+                    <i class='bx bx-x-circle'></i>
+                </button>
+            </div>
+
+            <form id="form-editar-producto" method="POST" action="" enctype="multipart/form-data">
+                {% csrf_token %}
+
+                <!-- Body -->
+                <div class="inv-modal-body">
+                    
+                    <!-- Fila 1: Código + Nombre -->
+                    <div class="inv-form-row">
+                        <div class="inv-form-group">
+                            <label class="inv-label" for="edit-codigo">Código *</label>
+                            <input id="edit-codigo" name="codigo" type="text" class="inv-input" required maxlength="10">
+                        </div>
+                        <div class="inv-form-group">
+                            <label class="inv-label" for="edit-nombre">Nombre *</label>
+                            <input id="edit-nombre" name="nombre" type="text" class="inv-input" required maxlength="30">
+                        </div>
+                    </div>
+
+                    <!-- Fila 2: Categoría + Gama -->
+                    <div class="inv-form-row">
+                        <div class="inv-form-group">
+                            <label class="inv-label" for="edit-categoria">Categoría *</label>
+                            <div class="inv-select-wrapper">
+                                <select id="edit-categoria" name="categoria" class="inv-select" required>
+                                    {% for val, label in categoria_opciones %}
+                                    <option value="{{ val }}">{{ label }}</option>
+                                    {% endfor %}
+                                </select>
+                                <i class='bx bx-chevron-down inv-select-icon'></i>
+                            </div>
+                        </div>
+                        <div class="inv-form-group">
+                            <label class="inv-label" for="edit-gama">Gama *</label>
+                            <div class="inv-select-wrapper">
+                                <select id="edit-gama" name="gama" class="inv-select" required>
+                                    {% for val, label in gama_opciones %}
+                                    <option value="{{ val }}">{{ label }}</option>
+                                    {% endfor %}
+                                </select>
+                                <i class='bx bx-chevron-down inv-select-icon'></i>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Fila 3: Material + Precio -->
+                    <div class="inv-form-row">
+                        <div class="inv-form-group">
+                            <label class="inv-label" for="edit-material">Material *</label>
+                            <div class="inv-select-wrapper">
+                                <select id="edit-material" name="material" class="inv-select" required>
+                                    {% for val, label in material_opciones %}
+                                    <option value="{{ val }}">{{ label }}</option>
+                                    {% endfor %}
+                                </select>
+                                <i class='bx bx-chevron-down inv-select-icon'></i>
+                            </div>
+                        </div>
+                        <div class="inv-form-group">
+                            <label class="inv-label" for="edit-precio">Precio (S/) *</label>
+                            <input id="edit-precio" name="precio" type="number" step="0.01" class="inv-input" required>
+                        </div>
+                    </div>
+
+                    <!-- Subida / Eliminación de Imagen -->
+                    <div class="inv-form-group-full">
+                        <label class="inv-label">Imagen del Producto</label>
+                        
+                        <!-- Bloque de imagen actual registrada -->
+                        <div id="edit-img-current-box" class="d-flex align-items-center gap-3 mb-2 p-2 border rounded" style="background: #fafbfa; display: none;">
+                            <img id="edit-img-preview" src="" alt="Imagen actual" class="prod-img" style="width: 50px; height: 50px; object-fit: contain;">
+                            <div>
+                                <div style="font-size: 0.8rem; font-weight: 600; color: var(--inv-text);">Imagen actual registrada</div>
+                                <label class="d-flex align-items-center gap-2 mt-1 text-danger" style="font-size: 0.78rem; cursor: pointer;">
+                                    <input type="checkbox" name="eliminar_imagen" id="check-eliminar-imagen" value="1">
+                                    <span><i class='bx bx-trash'></i> Eliminar esta imagen al guardar</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- Reemplazar o subir nueva imagen -->
+                        <div class="d-flex align-items-center gap-2">
+                            <input type="file" id="edit-imagen" name="imagen" accept="image/*" class="form-control" style="font-size: 0.8rem; border-radius: 8px;">
+                        </div>
+                        <small class="text-muted" style="font-size: 0.72rem;">Selecciona un archivo solo si deseas cambiar la imagen actual.</small>
+                    </div>
+
+                    <!-- Descripción -->
+                    <div class="inv-form-group-full">
+                        <label class="inv-label" for="edit-descripcion">Descripción</label>
+                        <textarea id="edit-descripcion" name="descripcion" class="inv-textarea" rows="2"></textarea>
+                    </div>
+
+                    <!-- Sección: Editar Tallas del Producto -->
+                    <div class="inv-form-group-full">
+                        <div class="d-flex align-items-center justify-content-between mb-2">
+                            <label class="inv-label mb-0">Tallas del Producto</label>
+                            <button type="button" class="inv-filter-btn" id="btn-edit-add-talla" style="padding: 3px 10px; font-size: 0.74rem;">
+                                <i class='bx bx-plus'></i>
+                                <span>Agregar Talla</span>
+                            </button>
+                        </div>
+                        <div class="inv-tallas-container" id="edit-tallas-container">
+                            <!-- Las tallas existentes y nuevas se cargan aquí con inventario.js -->
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- Footer -->
+                <div class="inv-modal-footer">
+                    <button type="submit" class="inv-btn-guardar">Guardar Cambios</button>
+                    <button type="button" class="inv-btn-cancelar" data-bs-dismiss="modal">Cancelar</button>
+                </div>
+            </form>
+
+        </div>
+    </div>
+</div>
+
+
+<!-- ========================================================
+     MODAL 3: VER TALLAS
+     ======================================================== -->
+<div class="modal fade" id="modalTallas" tabindex="-1" aria-labelledby="modalTallasLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content inv-modal-content">
+            <div class="inv-modal-header">
+                <h2 class="inv-modal-title" id="modalTallasLabel">Tallas del Producto</h2>
+                <button type="button" class="inv-modal-close" data-bs-dismiss="modal" aria-label="Cerrar">
+                    <i class='bx bx-x-circle'></i>
+                </button>
+            </div>
+            <div class="inv-modal-body">
+                <table class="inv-table" id="tallas-table" aria-label="Tabla de tallas">
+                    <thead>
+                        <tr>
+                            <th>Número / Talla</th>
+                            <th>Género</th>
+                            <th>Stock Disponible</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tallas-table-body">
+                        <!-- Llenado dinámicamente al pulsar Ver Tallas -->
+                    </tbody>
+                </table>
+            </div>
+            <div class="inv-modal-footer">
+                <button type="button" class="inv-btn-cancelar" data-bs-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<!-- ========================================================
+     MODAL 4: CONFIRMAR ELIMINACIÓN
+     ======================================================== -->
+<div class="modal fade" id="modalEliminar" tabindex="-1" aria-labelledby="modalEliminarLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" style="max-width: 440px;">
+        <div class="modal-content inv-modal-content">
+            <div class="inv-modal-header">
+                <h2 class="inv-modal-title text-danger" id="modalEliminarLabel">
+                    <i class='bx bx-trash' style="vertical-align: middle;"></i> Eliminar Producto
+                </h2>
+                <button type="button" class="inv-modal-close" data-bs-dismiss="modal" aria-label="Cerrar">
+                    <i class='bx bx-x-circle'></i>
+                </button>
+            </div>
+            <form id="form-eliminar-producto" method="POST" action="">
+                {% csrf_token %}
+                <div class="inv-modal-body">
+                    <p style="font-size: 0.9rem; color: var(--inv-text); margin-bottom: 0.5rem;">
+                        ¿Estás seguro de que deseas eliminar permanentemente el producto <strong id="eliminar-prod-nombre">--</strong>?
+                    </p>
+                    <p style="font-size: 0.78rem; color: #c0392b; margin: 0;">
+                        ⚠️ Esta acción también eliminará todas las tallas asociadas y su archivo de imagen en disco.
+                    </p>
+                </div>
+                <div class="inv-modal-footer">
+                    <button type="submit" class="inv-btn-guardar" style="background-color: #c0392b;">Sí, Eliminar</button>
+                    <button type="button" class="inv-btn-cancelar" data-bs-dismiss="modal">Cancelar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'inventario.js' %}"></script>
+{% endblock %}
